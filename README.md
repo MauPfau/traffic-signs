@@ -17,7 +17,7 @@ SVM classifier trained in colab for easier multi tasking.
 
 ## Additional comments
 
-Nothing yet.
+Pickle file for SVM is a large file, more complicated to push
 
 ## References
 
