@@ -11,9 +11,9 @@ SVM classifier trained in colab for easier multi tasking.
 * download images with `scripts/download_images.sh`
 * launch app in right environment in app folder using 
 
-'''bash
-python app.py
-'''
+
+`python app.py`
+
 
 ## Additional comments
 
