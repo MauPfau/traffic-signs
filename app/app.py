@@ -1,11 +1,13 @@
 import base64
 import io
+import yaml
 
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
+import plotly.graph_objs as go
 
 import numpy as np
 import tensorflow as tf
@@ -13,46 +15,68 @@ from PIL import Image
 
 from constants import CLASSES
 
+with open('app.yaml') as yaml_data:
+    
+    params = yaml.safe_load(yaml_data)
+    
 
-IMAGE_WIDTH = 30
-IMAGE_HEIGHT = IMAGE_WIDTH
+IMAGE_WIDTH = params[1]['IMAGE_WIDTH']
+IMAGE_HEIGHT = params[2]['IMAGE_HEIGHT']
 
 # Load DNN model
-classifier = tf.keras.models.load_model('../models/traffic_signs_2021-03-19_13-51-00.h5')
+classifier = tf.keras.models.load_model(params[0]['keras_path'])
 
-def classify_image(image, model, image_box=None):
+def classify_image(path, model, image_box=None):
   """Classify image by model
 
   Parameters
   ----------
-  content: image content
+  path: filepath to image
   model: tf/keras classifier
 
   Returns
   -------
-  class id returned by model classifier
+  class id with highest probability is returned
   """
   images_list = []
-  image = image.resize((IMAGE_WIDTH, IMAGE_HEIGHT), box=image_box)
-                                        # box argument clips image to (x1, y1, x2, y2)
+  image = path.resize((IMAGE_WIDTH, IMAGE_HEIGHT), box=image_box) # box argument clips image to (x1, y1, x2, y2)
   image = np.array(image)
   images_list.append(image)
   
-  return model.predict_classes(np.array(images_list))
+  return [np.argmax(model.predict(np.array(images_list))), model.predict(np.array(images_list))]
+
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+
+app = dash.Dash('Traffic Signs Recognition', external_stylesheets=external_stylesheets)
 
 
-app = dash.Dash('Traffic Signs Recognition') #, external_stylesheets=dbc.themes.BOOTSTRAP)
 
+#styles dictionaries
+layout = dict(
+    margin=dict(l=40, r=40, b=180, t=40),
+    hovermode="closest",
+    legend=dict(font=dict(color='#7f7f7f'), orientation="h"),
+    title= 'Probabilités estimées',
+    font=dict(
+        color="#7f7f7f"
+    ),
+)
 
-pre_style = {
-    'whiteSpace': 'pre-wrap',
-    'wordBreak': 'break-all',
-    'whiteSpace': 'normal'
-}
+title_style = dict(
+    textAlign='center',
+    backgroundColor='#0665A4',
+    color='#EAF1E8')
 
 
 # Define application layout
-app.layout = html.Div([
+app.layout = html.Div(style = dict(textAlign='center'), children=[
+    html.H1('Sign Classifier', 
+           style = title_style),
+    html.Hr(),
+    html.H3('Reconnaissance de panneaux de circulation grâce à un réseau de neurones entrainé'),
+    html.H6("Un modèle de réseau de neurones artificiels a été entrainé sur une base de données de panneaux de circulation existante, il permet d'afficher la probabilité d'appartenir à une catégorie de panneau."),
+    html.Hr(),
+    html.H6("Téléversez une image de panneau à reconnaître"),
     dcc.Upload(
         id='bouton-chargement',
         children=html.Div([
@@ -67,13 +91,13 @@ app.layout = html.Div([
             'borderStyle': 'dashed',
             'borderRadius': '5px',
             'textAlign': 'center',
+            'backgroundColor': '#E7F2FA',
+            'display': 'inline-block',
             'margin': '10px'
         }
     ),
     html.Div(id='mon-image'),
-    dcc.Input(id='mon-champ-texte', value='valeur initiale', type='text'),
-    html.Div(id='ma-zone-resultat')
-])
+                      ])
 
 @app.callback(Output('mon-image', 'children'),
               [Input('bouton-chargement', 'contents')])
@@ -83,10 +107,22 @@ def update_output(contents):
         if 'image' in content_type:
             image = Image.open(io.BytesIO(base64.b64decode(content_string)))
             predicted_class = classify_image(image, classifier)[0]
-            return html.Div([
+            estimated_probabilities = classify_image(image, classifier)[1][0]
+            max_proba = max(estimated_probabilities)
+            estimated_probabilities, classes_list = (list(t) for t in zip(*sorted(zip(estimated_probabilities, CLASSES.values()), reverse=True)))
+            return html.Div(style = dict(textAlign='center'), children = [
                 html.Hr(),
-                html.Img(src=contents),
-                html.H3('Classe prédite : {}'.format(CLASSES[predicted_class])),
+                html.Img(src=contents, style={'height':'25%', 'width':'25%', 'margin':'20px'}),
+                html.H3('Classe prédite : {}, avec une probabilité de : {:.5f}'.format(CLASSES[predicted_class], max_proba)),
+                html.Hr(),
+                html.Div([
+                    dcc.Graph(id='horizon_proba', 
+                             figure={
+                                 'data': [go.Bar(x=classes_list,
+                                                 y=estimated_probabilities)],
+                                 "layout": layout
+                             })
+                ]),
                 html.Hr(),
                 #html.Div('Raw Content'),
                 #html.Pre(contents, style=pre_style)
@@ -105,11 +141,23 @@ def update_output(contents):
                 content_string = base64.b64encode(img_bytes).decode('ascii')
                 # Appel du modèle de classification
                 predicted_class = classify_image(image, classifier)[0]
+                estimated_probabilities = classify_image(image, classifier)[1][0]
+                max_proba = max(estimated_probabilities)
+                estimated_probabilities, classes_list = (list(t) for t in zip(*sorted(zip(estimated_probabilities, CLASSES.values()), reverse=True)))
                 # Affichage de l'image
                 return html.Div([
                     html.Hr(),
-                    html.Img(src='data:image/png;base64,' + content_string),
-                    html.H3('Classe prédite : {}'.format(CLASSES[predicted_class])),
+                    html.Img(src='data:image/png;base64,' + content_string, style={'height':'25%', 'width':'25%'}),
+                    html.H3('Classe prédite : {}, avec une probabilité de : {:.5f}'.format(CLASSES[predicted_class], max_proba)),
+                    html.Hr(),
+                    html.Div([
+                        dcc.Graph(id='horizon_proba', 
+                                 figure={
+                                     'data': [go.Bar(x=classes_list,
+                                                     y=estimated_probabilities)],
+                                     "layout": layout
+                                 })
+                    ]),
                     html.Hr(),
                 ])
             except:
@@ -121,14 +169,6 @@ def update_output(contents):
                     html.Pre(contents, style=pre_style)
                 ])
             
-
-# Manage interactions with callbacks
-@app.callback(
-    Output(component_id='ma-zone-resultat', component_property='children'),
-    [Input(component_id='mon-champ-texte', component_property='value')]
-)
-def update_output_div(input_value):
-    return html.H3('Valeur saisie ici "{}"'.format(input_value))
 
 
 # Start the application

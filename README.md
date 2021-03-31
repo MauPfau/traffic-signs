@@ -1,11 +1,19 @@
 # Hands-on-2021
 
 Build a model and an interface to classify traffic signs (GTSRB dataset).
+Neural Network trained with colab TPU for faster training.
+SVM classifier trained in colab for easier multi tasking.
 
 ## Install
 
 * clone this repository 
+* install packages in conda environement
 * download images with `scripts/download_images.sh`
+* launch app in right environment in app folder using 
+
+'''bash
+python app.py
+'''
 
 ## Additional comments
 
